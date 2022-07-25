@@ -1,4 +1,4 @@
-	/*
+/*
  * OS_Internal.c
  *
  *  Created on: Feb 24, 2022
@@ -431,9 +431,22 @@ os_err_e os_list_remove(os_list_head_t* head, void* el){
 		it = it->next;
 	}
 
+	/* Update first
+	 ------------------------------------------------------*/
+	if(pCell == head->first){
+		head->first = head->first->next;
+	}
+
+	/* Update last
+	 ------------------------------------------------------*/
+	if(pCell == head->last){
+		head->last = (head->last->prev == &head->head) ? NULL : head->last->prev;
+	}
+
 	/* Kill cell
 	 ------------------------------------------------------*/
 	pPrev->next = pPrev->next->next;
+	if(pCell->next != NULL) pCell->next->prev = pCell->prev;
 
 	/* Reduce size and return
 	 ------------------------------------------------------*/
@@ -535,27 +548,27 @@ void os_list_clear(os_list_head_t* head){
 	 ---------------------------------------------------*/
 	OS_CRITICAL_SECTION(
 
-		/* Loop until list is empty
+			/* Loop until list is empty
 		 ---------------------------------------------------*/
-		os_list_cell_t* it = &head->head;
-		while(it != NULL){
+			os_list_cell_t* it = &head->head;
+	while(it != NULL){
 
-			/* Store address
+		/* Store address
 			 ---------------------------------------------------*/
-			os_list_cell_t* delete = it;
+		os_list_cell_t* delete = it;
 
-			/* Flag task as ready and go to next
+		/* Flag task as ready and go to next
 			 ---------------------------------------------------*/
-			it = it->next;
+		it = it->next;
 
-			/* Free allocation
+		/* Free allocation
 			 ---------------------------------------------------*/
-			os_heap_free(delete);
-		}
+		os_heap_free(delete);
+	}
 
-		/* Free head
+	/* Free head
 		 ---------------------------------------------------*/
-		os_heap_free(head);
+	os_heap_free(head);
 	);
 }
 
@@ -603,8 +616,8 @@ void os_task_list_sort(os_list_head_t* head){
 			/* Decide to swap or not
 			 ---------------------------------------------------*/
 			bool swap  = ((os_task_t*)it_fast->next->element)->priority == ((os_task_t*)it_fast->next->next->element)->priority;
-				 swap &= it_fast->next->order > it_fast->next->next->order;
-				 swap |= ((os_task_t*)it_fast->next->element)->priority < ((os_task_t*)it_fast->next->next->element)->priority;
+			swap &= it_fast->next->order > it_fast->next->next->order;
+			swap |= ((os_task_t*)it_fast->next->element)->priority < ((os_task_t*)it_fast->next->next->element)->priority;
 
 			/* Swap cells
 			 ---------------------------------------------------*/
