@@ -5,10 +5,10 @@ The RTOS was made using an STM32F407VGT and a nucleo board, but the system was d
 
 This RTOS has the following features :
 
-Priority Management
-Dynamic priority to avoid inversion of priority
-Ability to wait for multiple objects at once
-Mutex, Semaphores, Message queue and Event
-Heap management
-Object / task creation in run time
+ * Priority Management
+ * Dynamic priority to avoid inversion of priority
+ * Ability to wait for multiple objects at once
+ * Mutex, Semaphores, Message queue and Event
+ * Heap management
+ * Object / task creation in run time
 
