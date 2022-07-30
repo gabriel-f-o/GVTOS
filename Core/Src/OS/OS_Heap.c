@@ -5,7 +5,7 @@
  *      Author: Gabriel
  */
 
-#include "OS/OS_Common.h"
+#include "OS//OS_Common.h"
 #include "OS/OS_Heap.h"
 #include "OS/OS_Callbacks.h"
 
@@ -65,10 +65,19 @@ static void* os_heap_AllocateBeginning(os_heap_header_t* p, uint32_t size){
 	os_heap_header_t* newBlock   = p;
 	os_heap_header_t* newTopHead = (os_heap_header_t*) ( (uint32_t) (newBlock) + sizeof(os_heap_header_t) + size);
 
-	/* Add Block to list
+	/* If next header does not exist, create it
 	 ---------------------------------------------------*/
-	newTopHead->addr_next = newBlock->addr_next != (uint32_t)newTopHead ? newBlock->addr_next : newTopHead->addr_next;
-	newBlock->addr_next	  = (uint32_t) newTopHead;
+	if(newBlock->addr_next != (uint32_t)newTopHead){
+
+		/* Add Block to list
+		 ---------------------------------------------------*/
+		newTopHead->addr_next = newBlock->addr_next;
+		newBlock->addr_next	  = (uint32_t) newTopHead;
+
+		/* Mark new block head as unused
+		 ---------------------------------------------------*/
+		newTopHead->block_used = 0;
+	}
 
 	/* Mark block as used memory
 	 ---------------------------------------------------*/
@@ -99,13 +108,22 @@ static void* os_heap_AllocateEnd(os_heap_header_t* p, uint32_t size){
 	/* Get references to manipulate
 	 ---------------------------------------------------*/
 	uint32_t block_size = os_heap_BlockGetSize(p);
-	os_heap_header_t* newBlock   = (os_heap_header_t*) ( (uint32_t)p + block_size - size - sizeof(os_heap_header_t) );
 	os_heap_header_t* oldTopHead = (os_heap_header_t*) (p);
+	os_heap_header_t* newBlock   = (os_heap_header_t*) ( (uint32_t)p + block_size - size - sizeof(os_heap_header_t) );
 
-	/* Add Block to list
+	/* Create new header if needed
 	 ---------------------------------------------------*/
-	newBlock->addr_next   = oldTopHead->addr_next;
-	oldTopHead->addr_next = newBlock != oldTopHead ? (uint32_t) newBlock : oldTopHead->addr_next;
+	if(newBlock != oldTopHead){
+
+		/* Add Block to list
+		 ---------------------------------------------------*/
+		newBlock->addr_next = oldTopHead->addr_next;
+		oldTopHead->addr_next = (uint32_t)newBlock;
+
+		/* Mark old block head as unused
+		 ---------------------------------------------------*/
+		oldTopHead->block_used = 0;
+	}
 
 	/* Mark block as used memory
 	 ---------------------------------------------------*/
@@ -232,7 +250,6 @@ os_err_e os_heap_free(void* p){
 	/* Declare Current block and target block
 	 ---------------------------------------------------*/
 	os_heap_header_t* cur   = (os_heap_header_t*)(&os_heap[0]);
-	os_heap_header_t* block = (os_heap_header_t*)((uint32_t)p - sizeof(os_heap_header_t));
 
 	/* Declare auxiliary pointers to help deleting
 	 ---------------------------------------------------*/
@@ -241,7 +258,18 @@ os_err_e os_heap_free(void* p){
 
 	/* Search for the target block while still inside the heap
 	 ---------------------------------------------------*/
-	while(&os_heap[0] <= (uint8_t*)cur && (uint8_t*)cur <= &os_heap[sizeof(os_heap) - 1] && cur != (os_heap_header_t*) block){
+	bool inBounds = false;
+	bool BlockFound = false;
+	while(1){
+
+		/* Calculate if out of bounds of block found
+		 ---------------------------------------------------*/
+		inBounds = (uint32_t)&os_heap[0] <= (uint32_t)cur && (uint32_t)cur <= (uint32_t)&os_heap[sizeof(os_heap) - 1];
+		BlockFound = (uint32_t)cur <= (uint32_t)p && (cur->addr_next == 0 || (uint32_t)p <= (uint32_t)cur->addr_next );
+
+		/* Break if we finished searching
+		 ---------------------------------------------------*/
+		if(!inBounds || BlockFound) break;
 
 		/* Save current block and go to next block
 		 ---------------------------------------------------*/
@@ -251,7 +279,7 @@ os_err_e os_heap_free(void* p){
 
 	/* If the block was not found, or the block is outside the heap, return
 	 ---------------------------------------------------*/
-	if(cur != block || !(&os_heap[0] <= (uint8_t*)cur && (uint8_t*)cur <= &os_heap[sizeof(os_heap) - 1]) ) {
+	if( !BlockFound || !inBounds ) {
 		OS_EXIT_CRITICAL();
 		return OS_ERR_INVALID;
 	}
