@@ -1,0 +1,5 @@
+Debug/*
+.settings/*
+
+!Debug/GVTOS.elf
+!Debug/GVTOS.map
