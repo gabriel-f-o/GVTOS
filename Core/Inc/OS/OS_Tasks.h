@@ -10,11 +10,18 @@
 
 #include "OS/OS_Common.h"
 #include "OS/OS_Obj.h"
-#include "OS/OS_Mutex.h"
 
 /**********************************************
  * PUBLIC TYPES
  *********************************************/
+
+/* Tasks mode
+ ---------------------------------------------------*/
+typedef enum{
+	OS_TASK_MODE_RETURN,
+	OS_TASK_MODE_DELETE,
+	__OS_TASK_MODE_MAX,
+}os_task_mode_e;
 
 /* Tasks states
  ---------------------------------------------------*/
@@ -38,6 +45,8 @@ typedef struct os_task_{
 	uint32_t	 		stackSize;			// Stores the stack size
 	uint32_t	 		stackBase;			// stores the stack base address
 
+	uint16_t			pid;				//Process ID
+	void*				fnPtr;				//Store the code reference
 	os_handle_t*	 	objWaited;			// Object this task is waiting for
 	size_t	 			sizeObjs;			// Number of objects in list
 	size_t	 			objWanted;			// Index of the object this task wants to get when it wakes up. Used when waiting one of multiple objects
@@ -46,6 +55,9 @@ typedef struct os_task_{
 	void*				ownedMutex;			//List containing all mutexes owned by this task
 	void*				retVal;				//Return value;
 	int8_t				priority;			//Used internally to store calculated priority
+
+	int					argc;				//Used to store the number of arguments when loading an elf.
+	char**				argv;				//Array of strings for each argument
 } os_task_t;
 
 /**********************************************
@@ -57,17 +69,19 @@ typedef struct os_task_{
  *
  * @brief This function creates a new task, that will be called by the scheduler when the correct time comes
  *
- * @param os_handle_t* h		: [out] handle to object
- * @param char* name 			: [ in] name of the task
- * @param void* (*fn)(void*) 	: [ in] task's main function to be called
- * @param int8_t priority		: [ in] A priority to the task (0 is lowest priority) cannot be negative
- * @param uint32_t stack_size 	: [ in] The amount of stack to be reserved. A minimum of 128 bytes is required
- * @param void* arg				: [ in] Argument to be passed to the task
+ * @param os_handle_t* h						: [out] handle to object
+ * @param char* name 							: [ in] name of the task
+ * @param void* (*fn)(int argc, char* argv[]) 	: [ in] task's main function to be called
+ * @param os_task_mode_e mode					: [ in] Inform what the task should do when returning (delete or keep the task block to get its return value; ATTENTION : in mode RETURN the user must use os_task_delete to avoid leaks
+ * @param int8_t priority						: [ in] A priority to the task (0 is lowest priority) cannot be negative
+ * @param uint32_t stack_size 					: [ in] The amount of stack to be reserved. A minimum of 128 bytes is required
+ * @param void* argc							: [ in] First argument to be passed to the task (used for argc)
+ * @param void* argv							: [ in] Second argument to be passed to the task (used for argv)
  *
  * @return os_err_e : An error code (0 = OK)
  *
  **********************************************************************/
-os_err_e os_task_create(os_handle_t* h, char const * name, void* (*fn)(void* i), int8_t priority, uint32_t stack_size, void* arg);
+os_err_e os_task_create(os_handle_t* h, char const * name, void* (*fn)(int argc, char* argv[]), os_task_mode_e mode, int8_t priority, uint32_t stack_size, void* argc, void* argv);
 
 
 /***********************************************************************
@@ -176,6 +190,18 @@ void* os_task_getReturn(os_handle_t h);
  *
  **********************************************************************/
 os_task_state_e os_task_getState(os_handle_t h);
+
+
+/***********************************************************************
+ * OS get task by PID
+ *
+ * @brief This function searches for a task using its PID
+ *
+ * @param uint16_t pid : [in] PID of the searched task
+ *
+ * @return os_list_cell_t* : reference to the cell containing the element or null if not found
+ **********************************************************************/
+os_handle_t os_task_getByPID(uint16_t pid);
 
 
 /***********************************************************************

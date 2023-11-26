@@ -11,6 +11,7 @@
 #include "OS/OS_Heap.h"
 #include "OS/OS_Internal.h"
 #include "OS/OS_Tasks.h"
+#include "OS/OS_Mutex.h"
 
 /**********************************************
  * EXTERNAL VARIABLES

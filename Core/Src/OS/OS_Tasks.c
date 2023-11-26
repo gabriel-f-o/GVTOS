@@ -133,168 +133,6 @@ static os_err_e os_task_objTake(os_handle_t h, os_handle_t takingTask){
 	return OS_ERR_OK;
 }
 
-
-/***********************************************************************
- * OS Task Start
- *
- * @brief This function starts a new task, that will be called by the scheduler when the correct time comes
- *
- * @param os_handle_t* h		: [out] handle to object
- * @param char* name 			: [ in] name of the task
- * @param void* (*fn)(void*) 	: [ in] task's main function to be called
- * @param os_task_mode_e mode	: [ in] Inform what the task should do when returning (delete or keep the task block to get its return value; ATTENTION : in mode RETURN the user must use os_task_delete to avoid leaks
- * @param int8_t priority		: [ in] A priority to the task (0 is lowest priority) cannot be negative
- * @param uint32_t stack_size 	: [ in] The amount of stack to be reserved. A minimum of 128 bytes is required
- * @param void* argc			: [ in] First argument to be passed to the task (used for argc)
- * @param void* argv			: [ in] Second argument to be passed to the task (used for argv)
- * @param uint32_t r9			: [ in] R9 value. Used to store the GOT
- *
- * @return os_err_e : An error code (0 = OK)
- *
- **********************************************************************/
-static os_err_e os_task_start(os_handle_t* h, char const * name, void* (*fn)(void* i), os_task_mode_e mode, int8_t priority, uint32_t stack_size, void* argc, void* argv, uint32_t r9){
-
-	/* Check for argument errors
-	 ------------------------------------------------------*/
-	if(h == NULL) 							return OS_ERR_BAD_ARG;
-	if(fn == NULL) 							return OS_ERR_BAD_ARG;
-	if(priority < 0) 						return OS_ERR_BAD_ARG;
-	if(mode >= __OS_TASK_MODE_MAX) 			return OS_ERR_BAD_ARG;
-	if(stack_size < OS_MINIMUM_STACK_SIZE)  return OS_ERR_BAD_ARG;
-	if(os_init_get() == false)				return OS_ERR_NOT_READY;
-
-	/* Alloc the task block
-	 ------------------------------------------------------*/
-	os_task_t* t = (os_task_t*)os_heap_alloc(sizeof(os_task_t));
-
-	/* Check allocation
-	 ------------------------------------------------------*/
-	if(t == 0) return OS_ERR_INSUFFICIENT_HEAP;
-
-	/* Alloc the stack
-	 ------------------------------------------------------*/
-	uint32_t stk = (uint32_t) os_heap_alloc(stack_size);
-	if(stk == 0){
-		os_heap_free(t);
-		return OS_ERR_INSUFFICIENT_HEAP;
-	}
-
-	/* Create a unique PID
-	 ------------------------------------------------------*/
-	uint16_t pid = 0;
-	uint32_t attempts = 0;
-	while(1){
-
-		/* Generate PID using the tick
-		 ------------------------------------------------------*/
-		uint32_t ms = os_getMsTick() + attempts;
-		pid = (uint16_t)( (ms & 0xFF) ^ ((ms >> 16) & 0xFF) );
-
-		/* Check if PID exists
-		 ------------------------------------------------------*/
-		if(os_task_getByPID(pid) == NULL){
-			break;
-		}
-
-		attempts++;
-	}
-
-	/* Init Task
-	 ------------------------------------------------------*/
-	t->obj.objUpdate	= 0;
-	t->obj.type			= OS_OBJ_TASK;
-	t->obj.getFreeCount	= &os_task_getFreeCount;
-	t->obj.blockList	= os_list_init();
-	t->obj.obj_take		= &os_task_objTake;
-	t->obj.name			= (char*) name;
-
-	t->fnPtr			= fn;
-	t->basePriority		= priority;
-	t->priority		    = priority;
-	t->pid				= pid;
-	t->state			= OS_TASK_READY;
-	t->wakeCoutdown	 	= 0;
-	t->stackBase		= (stk + stack_size);
-	t->stackSize 		= stack_size;
-	t->pStack			= (uint32_t*) ( t->stackBase & (~0x7UL) );
-	t->objWaited		= NULL;
-	t->sizeObjs 		= 0;
-	t->retVal			= NULL;
-	t->ownedMutex		= os_list_init();
-
-	t->argc				= argv == NULL ? 0 : (int)argc;
-	t->argv				= argv;
-
-	/* Init Task Stack
-	 ------------------------------------------------------*/
-	*--t->pStack = (uint32_t) 0x01000000;	 	//xPSR (bit 24 must be 1 otherwise BOOM)
-	*--t->pStack = (uint32_t) fn;				//Return
-	*--t->pStack = (mode == OS_TASK_MODE_RETURN) ? (uint32_t) &os_task_return : (uint32_t) &os_task_end;  //LR
-	*--t->pStack = (uint32_t) 0;				//R12
-	*--t->pStack = (uint32_t) 0;			 	//R3
-	*--t->pStack = (uint32_t) 0;			 	//R2
-	*--t->pStack = (uint32_t) argv;			 	//R1 (argument 2)
-	*--t->pStack = (uint32_t) argc;			 	//R0 (argument 1)
-
-	*--t->pStack = (uint32_t) 0xFFFFFFFD;    	//LR (when called by the interrupt, flag as basic frame used always)
-	*--t->pStack = (uint32_t) 0;			 	//R11
-	*--t->pStack = (uint32_t) 0;			 	//R10
-	*--t->pStack = (uint32_t) r9; 			 	//R9
-	*--t->pStack = (uint32_t) 0;			 	//R8
-	*--t->pStack = (uint32_t) 0;				//R7
-	*--t->pStack = (uint32_t) 0;				//R6
-	*--t->pStack = (uint32_t) 0;				//R5
-	*--t->pStack = (uint32_t) 0;				//R4
-
-	/* Handles any heap errors
-	 ------------------------------------------------------*/
-	if(t->obj.blockList == NULL || t->ownedMutex == NULL){
-		os_heap_free(t);
-		os_heap_free((void*)stk);
-		os_list_clear(t->obj.blockList);
-		os_list_clear(t->ownedMutex);
-		return OS_ERR_INSUFFICIENT_HEAP;
-	}
-
-	/* Add task to list
-	 ------------------------------------------------------*/
-	os_err_e err = os_list_add(&os_head, (os_handle_t)t, OS_LIST_FIRST);
-	if(err != OS_ERR_OK) {
-		os_heap_free(t);
-		os_heap_free((void*)stk);
-		os_list_clear(t->obj.blockList);
-		os_list_clear(t->ownedMutex);
-		return OS_ERR_INSUFFICIENT_HEAP;
-	}
-
-	/* Add object to object list
-	 ------------------------------------------------------*/
-	os_err_e ret = os_list_add(&os_obj_head, (os_handle_t) t, OS_LIST_FIRST);
-	if(ret != OS_ERR_OK) {
-		os_heap_free(t);
-		os_heap_free((void*)stk);
-		os_list_clear(t->obj.blockList);
-		os_list_clear(t->ownedMutex);
-		os_list_remove(&os_head, (os_handle_t)t);
-		return ret;
-	}
-
-	/* Calculate task priority
-	 ------------------------------------------------------*/
-	int8_t task_prio = os_task_getPrio((os_handle_t) t);
-	int8_t cur_prio = ( (os_cur_task == NULL) ? -1 : os_task_getPrio(os_cur_task->element) );
-
-	/* If created task was a higher priority, and scheduler is running, yeild
-	 ---------------------------------------------------*/
-	if(task_prio > cur_prio && os_scheduler_state_get() == OS_SCHEDULER_START) os_task_yeild();
-
-	/* link handle with task object
-	 ---------------------------------------------------*/
-	*h = ( (err == OS_ERR_OK) ? (os_handle_t) t : NULL );
-
-	return err;
-}
-
 /**********************************************
  * OS PRIVATE FUNCTIONS
  *********************************************/
@@ -341,7 +179,12 @@ os_err_e os_task_init(char* main_name, int8_t main_task_priority, uint32_t inter
 	t->obj.getFreeCount		= &os_task_getFreeCount;
 	t->obj.blockList		= os_list_init();
 	t->obj.obj_take			= &os_task_objTake;
-	t->obj.name 			= main_name;
+	if(main_name != NULL){
+		strncpy(t->obj.name, (char*)main_name, sizeof(t->obj.name));
+		t->obj.name[sizeof(t->obj.name) - 1] = '\0';
+	}
+	else
+		t->obj.name[0] = '\0';
 
 	t->basePriority 		= main_task_priority;
 	t->priority		    	= main_task_priority;
@@ -452,52 +295,166 @@ bool os_task_must_yeild(){
  *
  * @brief This function creates a new task, that will be called by the scheduler when the correct time comes
  *
- * @param os_handle_t* h		: [out] handle to object
- * @param char* name 			: [ in] name of the task
- * @param void* (*fn)(void*) 	: [ in] task's main function to be called
- * @param os_task_mode_e mode	: [ in] Inform what the task should do when returning (delete or keep the task block to get its return value; ATTENTION : in mode RETURN the user must use os_task_delete to avoid leaks
- * @param int8_t priority		: [ in] A priority to the task (0 is lowest priority) cannot be negative
- * @param uint32_t stack_size 	: [ in] The amount of stack to be reserved. A minimum of 128 bytes is required
- * @param void* arg				: [ in] Argument to be passed to the task
+ * @param os_handle_t* h						: [out] handle to object
+ * @param char* name 							: [ in] name of the task
+ * @param void* (*fn)(int argc, char* argv[]) 	: [ in] task's main function to be called
+ * @param os_task_mode_e mode					: [ in] Inform what the task should do when returning (delete or keep the task block to get its return value; ATTENTION : in mode RETURN the user must use os_task_delete to avoid leaks
+ * @param int8_t priority						: [ in] A priority to the task (0 is lowest priority) cannot be negative
+ * @param uint32_t stack_size 					: [ in] The amount of stack to be reserved. A minimum of 128 bytes is required
+ * @param void* argc							: [ in] First argument to be passed to the task (used for argc)
+ * @param void* argv							: [ in] Second argument to be passed to the task (used for argv)
  *
  * @return os_err_e : An error code (0 = OK)
  *
  **********************************************************************/
-os_err_e os_task_create(os_handle_t* h, char const * name, void* (*fn)(void* i), os_task_mode_e mode, int8_t priority, uint32_t stack_size, void* arg){
+os_err_e os_task_create(os_handle_t* h, char const * name, void* (*fn)(int argc, char* argv[]), os_task_mode_e mode, int8_t priority, uint32_t stack_size, void* argc, void* argv){
 
-	/* Start task with the correct arguments
+	/* Check for argument errors
 	 ------------------------------------------------------*/
-	return os_task_start(h, name, fn, mode, priority, stack_size, arg, NULL, 0);
+	if(h == NULL) 							return OS_ERR_BAD_ARG;
+	if(fn == NULL) 							return OS_ERR_BAD_ARG;
+	if(priority < 0) 						return OS_ERR_BAD_ARG;
+	if(mode >= __OS_TASK_MODE_MAX) 			return OS_ERR_BAD_ARG;
+	if(stack_size < OS_MINIMUM_STACK_SIZE)  return OS_ERR_BAD_ARG;
+	if(os_init_get() == false)				return OS_ERR_NOT_READY;
+
+	/* Alloc the task block
+	 ------------------------------------------------------*/
+	os_task_t* t = (os_task_t*)os_heap_alloc(sizeof(os_task_t));
+
+	/* Check allocation
+	 ------------------------------------------------------*/
+	if(t == 0) return OS_ERR_INSUFFICIENT_HEAP;
+
+	/* Alloc the stack
+	 ------------------------------------------------------*/
+	uint32_t stk = (uint32_t) os_heap_alloc(stack_size);
+	if(stk == 0){
+		os_heap_free(t);
+		return OS_ERR_INSUFFICIENT_HEAP;
+	}
+
+	/* Create a unique PID
+	 ------------------------------------------------------*/
+	uint16_t pid = 0;
+	uint32_t attempts = 0;
+	while(1){
+
+		/* Generate PID using the tick
+		 ------------------------------------------------------*/
+		uint32_t ms = os_getMsTick() + attempts;
+		pid = (uint16_t)( (ms & 0xFF) ^ ((ms >> 16) & 0xFF) );
+
+		/* Check if PID exists
+		 ------------------------------------------------------*/
+		if(os_task_getByPID(pid) == NULL){
+			break;
+		}
+
+		attempts++;
+	}
+
+	/* Init Task
+	 ------------------------------------------------------*/
+	t->obj.objUpdate	= 0;
+	t->obj.type			= OS_OBJ_TASK;
+	t->obj.getFreeCount	= &os_task_getFreeCount;
+	t->obj.blockList	= os_list_init();
+	t->obj.obj_take		= &os_task_objTake;
+
+	if(name != NULL){
+		strncpy(t->obj.name, (char*)name, sizeof(t->obj.name));
+		t->obj.name[sizeof(t->obj.name) - 1] = '\0';
+	}
+	else
+		t->obj.name[0] = '\0';
+
+	t->fnPtr			= fn;
+	t->basePriority		= priority;
+	t->priority		    = priority;
+	t->pid				= pid;
+	t->state			= OS_TASK_READY;
+	t->wakeCoutdown	 	= 0;
+	t->stackBase		= (stk + stack_size);
+	t->stackSize 		= stack_size;
+	t->pStack			= (uint32_t*) ( t->stackBase & (~0x7UL) );
+	t->objWaited		= NULL;
+	t->sizeObjs 		= 0;
+	t->retVal			= NULL;
+	t->ownedMutex		= os_list_init();
+
+	t->argc				= argv == NULL ? 0 : (int)argc;
+	t->argv				= argv;
+
+	/* Init Task Stack
+	 ------------------------------------------------------*/
+	*--t->pStack = (uint32_t) 0x01000000;	 	//xPSR (bit 24 must be 1 otherwise BOOM)
+	*--t->pStack = (uint32_t) fn;				//Return
+	*--t->pStack = (mode == OS_TASK_MODE_RETURN) ? (uint32_t) &os_task_return : (uint32_t) &os_task_end;  //LR
+	*--t->pStack = (uint32_t) 0;				//R12
+	*--t->pStack = (uint32_t) 0;			 	//R3
+	*--t->pStack = (uint32_t) 0;			 	//R2
+	*--t->pStack = (uint32_t) argv;			 	//R1 (argument 2)
+	*--t->pStack = (uint32_t) argc;			 	//R0 (argument 1)
+
+	*--t->pStack = (uint32_t) 0xFFFFFFFD;    	//LR (when called by the interrupt, flag as basic frame used always)
+	*--t->pStack = (uint32_t) 0;			 	//R11
+	*--t->pStack = (uint32_t) 0;			 	//R10
+	*--t->pStack = (uint32_t) 0; 			 	//R9
+	*--t->pStack = (uint32_t) 0;			 	//R8
+	*--t->pStack = (uint32_t) 0;				//R7
+	*--t->pStack = (uint32_t) 0;				//R6
+	*--t->pStack = (uint32_t) 0;				//R5
+	*--t->pStack = (uint32_t) 0;				//R4
+
+	/* Handles any heap errors
+	 ------------------------------------------------------*/
+	if(t->obj.blockList == NULL || t->ownedMutex == NULL){
+		os_heap_free(t);
+		os_heap_free((void*)stk);
+		os_list_clear(t->obj.blockList);
+		os_list_clear(t->ownedMutex);
+		return OS_ERR_INSUFFICIENT_HEAP;
+	}
+
+	/* Add task to list
+	 ------------------------------------------------------*/
+	os_err_e err = os_list_add(&os_head, (os_handle_t)t, OS_LIST_FIRST);
+	if(err != OS_ERR_OK) {
+		os_heap_free(t);
+		os_heap_free((void*)stk);
+		os_list_clear(t->obj.blockList);
+		os_list_clear(t->ownedMutex);
+		return OS_ERR_INSUFFICIENT_HEAP;
+	}
+
+	/* Add object to object list
+	 ------------------------------------------------------*/
+	os_err_e ret = os_list_add(&os_obj_head, (os_handle_t) t, OS_LIST_FIRST);
+	if(ret != OS_ERR_OK) {
+		os_heap_free(t);
+		os_heap_free((void*)stk);
+		os_list_clear(t->obj.blockList);
+		os_list_clear(t->ownedMutex);
+		os_list_remove(&os_head, (os_handle_t)t);
+		return ret;
+	}
+
+	/* Calculate task priority
+	 ------------------------------------------------------*/
+	int8_t task_prio = os_task_getPrio((os_handle_t) t);
+	int8_t cur_prio = ( (os_cur_task == NULL) ? -1 : os_task_getPrio(os_cur_task->element) );
+
+	/* If created task was a higher priority, and scheduler is running, yeild
+	 ---------------------------------------------------*/
+	if(task_prio > cur_prio && os_scheduler_state_get() == OS_SCHEDULER_START) os_task_yeild();
+
+	/* link handle with task object
+	 ---------------------------------------------------*/
+	*h = ( (err == OS_ERR_OK) ? (os_handle_t) t : NULL );
+
+	return err;
 }
-
-
-/***********************************************************************
- * OS Create process
- *
- * @brief This function creates a process using its ELF file
- *
- * @param char* file   : [in] File's name
- * @param void* argc   : [in] Argument number to be passed to the task
- * @param char* argv[] : [in] Array of strings to be passed to the task
- *
- * @return os_err_e : An error code (0 = OK)
- *
- **********************************************************************/
-os_err_e os_task_createProcess(char* file, int argc, char* argv[]){
-
-	/* Load ELF file
-	 ------------------------------------------------------*/
-	os_elf_prog_t prog = os_elf_loadFile(file);
-
-	if(prog.entryPoint == NULL || prog.gotBase == 0)
-		return OS_ERR_UNKNOWN;
-
-	/* Start task with correct arguments
-	 ------------------------------------------------------*/
-	os_handle_t h;
-	return os_task_start(&h, file, prog.entryPoint, OS_TASK_MODE_DELETE, 10, 5 * OS_DEFAULT_STACK_SIZE, (void*) argc, argv, prog.gotBase);
-}
-
 
 /***********************************************************************
  * OS Task End

@@ -60,28 +60,21 @@ static philo_state_e philosopher_state[4];
 static os_handle_t philosopher[4];
 static os_handle_t forks[4];
 
-static char* names[] = {
-		"Philo 0",
-		"Philo 1",
-		"Philo 2",
-		"Philo 3",
-};
-
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 
 /* USER CODE BEGIN PFP */
-void* philosopher_fn(void* arg){
+void* philosopher_fn(int argc, char* argv[]){
 
-	int i = (int) arg;
+	int i = (int) argc;
 	while(1)
 	{
 		/* Thinking
 		-----------------------------------------------*/
 		philosopher_state[i] = PHILO_THINKING;
-		uint32_t thinkTime_s = (uint32_t)((rand() % 5000) + 1000); // 1 to 5s;
+		uint32_t thinkTime_s = (uint32_t)((rand() % 4000) + 1000); // 1 to 5s;
 		os_task_sleep(thinkTime_s);
 
 		/* Hungry
@@ -92,7 +85,7 @@ void* philosopher_fn(void* arg){
 		/* Eating
 		-----------------------------------------------*/
 		philosopher_state[i] = PHILO_EATING;
-		uint32_t eatTime_s = (uint32_t)((rand() % 3000) + 1000); // 1 to 3s;
+		uint32_t eatTime_s = (uint32_t)((rand() % 2000) + 1000); // 1 to 3s;
 		os_task_sleep(eatTime_s);
 
 		os_mutex_release(forks[i]);
@@ -143,11 +136,11 @@ int main(void)
 
 	for(int i = 0; i < COUNTOF(philosopher); i++){
 		char name[50];
-		snprintf(name, sizeof(name), "Philosopher %d", i);
-		ASSERT(os_task_create(&philosopher[i], names[i], philosopher_fn, (int8_t)(10), OS_DEFAULT_STACK_SIZE, (void*) i) == OS_ERR_OK);
+		snprintf(name, sizeof(name), "Philo %d", i);
+		ASSERT(os_task_create(&philosopher[i], name, philosopher_fn, OS_TASK_MODE_DELETE, (int8_t)(10) , OS_DEFAULT_STACK_SIZE, (void*) i, NULL) == OS_ERR_OK);
 
 		snprintf(name, sizeof(name), "Mux %d", i);
-		ASSERT(os_mutex_create(&forks[i], NULL) == OS_ERR_OK);
+		ASSERT(os_mutex_create(&forks[i], name) == OS_ERR_OK);
 	}
 
 	os_scheduler_start();
