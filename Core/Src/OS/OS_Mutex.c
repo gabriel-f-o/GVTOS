@@ -131,7 +131,18 @@ os_err_e os_mutex_create(os_handle_t* h, char const * name){
 	mutex->obj.getFreeCount		= os_mutex_getFreeCount;
 	mutex->obj.obj_take			= os_mutex_objTake;
 	mutex->obj.blockList		= os_list_init();
-	mutex->obj.name				= (char*)name;
+
+	/* Copy name
+	 ------------------------------------------------------*/
+	if(name != NULL){
+		strncpy(mutex->obj.name, (char*)name, sizeof(mutex->obj.name));
+		mutex->obj.name[sizeof(mutex->obj.name) - 1] = '\0';
+	}
+	else
+		mutex->obj.name[0] = '\0';
+
+	/* Finish init
+	 ------------------------------------------------------*/
 
 	mutex->state 				= OS_MUTEX_STATE_UNLOCKED;
 	mutex->owner 				= NULL;

@@ -38,6 +38,11 @@ static uint32_t os_evt_getFreeCount(os_handle_t h){
 	if(h == NULL) return 0;
 	if(h->type != OS_OBJ_EVT) return 0;
 
+	/* Enter critical
+	 ------------------------------------------------------*/
+	OS_DECLARE_IRQ_STATE;
+	OS_ENTER_CRITICAL();
+
 	/* Convert address
 	 ------------------------------------------------------*/
 	os_evt_t* evt = (os_evt_t*)h;
@@ -52,6 +57,7 @@ static uint32_t os_evt_getFreeCount(os_handle_t h){
 		}
 	}
 
+	OS_EXIT_CRITICAL();
 	return freeCount;
 }
 
@@ -136,8 +142,18 @@ os_err_e os_evt_create(os_handle_t* h, os_evt_reset_mode_e mode, char const * na
 	evt->obj.getFreeCount	= os_evt_getFreeCount;
 	evt->obj.obj_take		= os_evt_objTake;
 	evt->obj.blockList		= os_list_init();
-	evt->obj.name			= (char*)name;
 
+	/* Copy name
+	 ------------------------------------------------------*/
+	if(name != NULL){
+		strncpy(evt->obj.name, (char*)name, sizeof(evt->obj.name));
+		evt->obj.name[sizeof(evt->obj.name) - 1] = '\0';
+	}
+	else
+		evt->obj.name[0] = '\0';
+
+	/* Finish init
+	 ------------------------------------------------------*/
 	evt->state				= OS_EVT_STATE_RESET;
 	evt->mode				= mode;
 

@@ -119,7 +119,18 @@ os_err_e os_sem_create(os_handle_t* h, uint16_t init_count, uint16_t max_count, 
 	sem->obj.getFreeCount	= &os_sem_getFreeCount;
 	sem->obj.obj_take		= &os_sem_objTake;
 	sem->obj.blockList		= os_list_init();
-	sem->obj.name			= (char*)name;
+
+	/* Copy name
+	 ------------------------------------------------------*/
+	if(name != NULL){
+		strncpy(sem->obj.name, (char*)name, sizeof(sem->obj.name));
+		sem->obj.name[sizeof(sem->obj.name) - 1] = '\0';
+	}
+	else
+		sem->obj.name[0] = '\0';
+
+	/* Finish init
+	 ------------------------------------------------------*/
 
 	sem->count 				= init_count;
 	sem->count_max 			= max_count;

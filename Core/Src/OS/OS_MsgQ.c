@@ -97,11 +97,22 @@ os_err_e os_msgQ_create(os_hMsgQ_t* msgQ, os_msgQ_mode_e mode, char const * name
 	/* Init msgQ
 	 ------------------------------------------------------*/
 	q->obj.type 			= OS_OBJ_MSGQ;
-	q->obj.name 			= (char*)name;
 	q->obj.objUpdate 		= 0;
 	q->obj.getFreeCount		= os_msgQ_getFreeCount;
 	q->obj.obj_take 		= os_msgQ_objTake;
 	q->obj.blockList		= os_list_init();
+
+	/* Copy name
+	 ------------------------------------------------------*/
+	if(name != NULL){
+		strncpy(q->obj.name, (char*)name, sizeof(q->obj.name));
+		q->obj.name[sizeof(q->obj.name) - 1] = '\0';
+	}
+	else
+		q->obj.name[0] = '\0';
+
+	/* Finish init
+	 ------------------------------------------------------*/
 
 	q->msgList		 		= os_list_init();
 	q->mode		 			= mode;

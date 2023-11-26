@@ -48,7 +48,7 @@ typedef enum{
  ---------------------------------------------------*/
 typedef struct os_obj_{
 	os_obj_type_e 	type;															//Indicates what type of object
-	char*		 	name;															//Object's name
+	char		 	name[OS_NAME_MAX_LEN];											//Object's name
 	bool			objUpdate;														//Indicates if an update is needed in the block list of this object
 	uint32_t 		(*getFreeCount) (os_handle_t h);								//Function to get the freecount
 	os_err_e 		(*obj_take) 	(os_handle_t h, os_handle_t takingTask);		//Function to take the object
