@@ -22,6 +22,8 @@
 #include "main.h"
 #include "tim.h"
 #include "gpio.h"
+#include <stdio.h>
+#include <stdlib.h>
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -31,7 +33,11 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-
+typedef enum{
+	PHILO_THINKING,
+	PHILO_HUNGRY,
+	PHILO_EATING,
+}philo_state_e;
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -50,11 +56,16 @@
 #define ASSERT(x)	if( !(x) ) Error_Handler();
 #define COUNTOF(x)	(int) ((sizeof(x) / sizeof(*x)))
 
-os_handle_t tasks[5];
-os_handle_t mutex[5];
-os_hMsgQ_t queue;
+static philo_state_e philosopher_state[4];
+static os_handle_t philosopher[4];
+static os_handle_t forks[4];
 
-char * task_name[] = { "T0", "T1", "T2", "T3", "T4" };
+static char* names[] = {
+		"Philo 0",
+		"Philo 1",
+		"Philo 2",
+		"Philo 3",
+};
 
 /* USER CODE END PV */
 
@@ -62,92 +73,38 @@ char * task_name[] = { "T0", "T1", "T2", "T3", "T4" };
 void SystemClock_Config(void);
 
 /* USER CODE BEGIN PFP */
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
+void* philosopher_fn(void* arg){
 
+	int i = (int) arg;
+	while(1)
+	{
+		/* Thinking
+		-----------------------------------------------*/
+		philosopher_state[i] = PHILO_THINKING;
+		uint32_t thinkTime_s = (uint32_t)((rand() % 5000) + 1000); // 1 to 5s;
+		os_task_sleep(thinkTime_s);
+
+		/* Hungry
+		-----------------------------------------------*/
+		philosopher_state[i] = PHILO_HUNGRY;
+		os_obj_multiple_WaitAll(NULL, OS_WAIT_FOREVER, 2, forks[i], forks[i == 0 ? COUNTOF(forks) - 1 : i - 1]);
+
+		/* Eating
+		-----------------------------------------------*/
+		philosopher_state[i] = PHILO_EATING;
+		uint32_t eatTime_s = (uint32_t)((rand() % 3000) + 1000); // 1 to 3s;
+		os_task_sleep(eatTime_s);
+
+		os_mutex_release(forks[i]);
+		os_mutex_release(forks[i == 0 ? COUNTOF(forks) - 1 : i - 1]);
+	}
+
+	return NULL;
 }
 /* USER CODE END PFP */
-uint32_t jebatest;
+
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
-void* t0(void* arg){
-	UNUSED_ARG(arg);
-
-	ASSERT(os_obj_single_wait(mutex[0], OS_WAIT_FOREVER, NULL) != NULL);
-
-	ASSERT(os_msgQ_wait(queue, OS_WAIT_FOREVER, NULL) == &jebatest);
-
-	while(1){
-
-	}
-
-	os_task_end();
-	return NULL;
-}
-
-void* t1(void* arg){
-	UNUSED_ARG(arg);
-
-	os_task_sleep(500);
-
-	ASSERT(os_msgQ_wait(queue, OS_WAIT_FOREVER, NULL) == &jebatest);
-
-	while(1){
-
-	}
-
-	os_task_end();
-	return NULL;
-}
-
-void* t2(void* arg){
-	UNUSED_ARG(arg);
-
-	os_task_sleep(1000);
-
-	os_msgQ_push(queue, &jebatest);
-	ASSERT(os_obj_single_wait(mutex[0], 500, NULL) != NULL);
-
-	os_task_end();
-	return NULL;
-}
-
-void* t3(void* arg){
-	UNUSED_ARG(arg);
-
-	os_task_sleep(10000);
-
-	os_msgQ_wait(queue, OS_WAIT_FOREVER, NULL);
-	os_msgQ_push(queue, &jebatest);
-	os_msgQ_wait(queue, OS_WAIT_FOREVER, NULL);
-
-	while(1){
-
-		os_task_sleep(1000);
-
-		os_msgQ_push(queue, &jebatest);
-		os_msgQ_wait(queue, OS_WAIT_FOREVER, NULL);
-
-	}
-
-	os_task_end();
-	return NULL;
-}
-
-void* t4(void* arg){
-	UNUSED_ARG(arg);
-
-	os_task_end();
-	return NULL;
-}
-
-void* (*tsks[])(void* arg) = {
-		t0,
-		t1,
-		t2,
-		t3,
-		t4,
-};
 
 /* USER CODE END 0 */
 
@@ -158,7 +115,7 @@ void* (*tsks[])(void* arg) = {
 int main(void)
 {
 	/* USER CODE BEGIN 1 */
-
+	srand(0);
 	/* USER CODE END 1 */
 
 	/* MCU Configuration--------------------------------------------------------*/
@@ -184,32 +141,62 @@ int main(void)
 
 	ASSERT(os_init("main", 9, OS_DEFAULT_STACK_SIZE, "idle", OS_DEFAULT_STACK_SIZE) == OS_ERR_OK);
 
-	ASSERT(os_task_create(&tasks[0], task_name[0], tsks[0], (int8_t)(10), OS_DEFAULT_STACK_SIZE, (void*) NULL) == OS_ERR_OK);
-	ASSERT(os_task_create(&tasks[1], task_name[1], tsks[1], (int8_t)(11), OS_DEFAULT_STACK_SIZE, (void*) NULL) == OS_ERR_OK);
-	ASSERT(os_task_create(&tasks[2], task_name[2], tsks[2], (int8_t)(12), OS_DEFAULT_STACK_SIZE, (void*) NULL) == OS_ERR_OK);
-	ASSERT(os_task_create(&tasks[3], task_name[3], tsks[3], (int8_t)(13), OS_DEFAULT_STACK_SIZE, (void*) NULL) == OS_ERR_OK);
-	ASSERT(os_msgQ_create(&queue, OS_MSGQ_MODE_FIFO, "Jeba") == OS_ERR_OK);
-	ASSERT(os_mutex_create(&mutex[0], "Jeba") == OS_ERR_OK);
+	for(int i = 0; i < COUNTOF(philosopher); i++){
+		char name[50];
+		snprintf(name, sizeof(name), "Philosopher %d", i);
+		ASSERT(os_task_create(&philosopher[i], names[i], philosopher_fn, (int8_t)(10), OS_DEFAULT_STACK_SIZE, (void*) i) == OS_ERR_OK);
+
+		snprintf(name, sizeof(name), "Mux %d", i);
+		ASSERT(os_mutex_create(&forks[i], NULL) == OS_ERR_OK);
+	}
 
 	os_scheduler_start();
-
-	ASSERT(os_obj_multiple_WaitAll(NULL, OS_WAIT_FOREVER, 2, tasks[0], tasks[1]) != NULL);
-
-	for(int i = 0; i < COUNTOF(tasks); i++){
-		os_task_delete(tasks[i]);
-	}
-
-	for(int i = 0; i < COUNTOF(mutex); i++){
-		os_mutex_delete(mutex[i]);
-	}
-
-	os_msgQ_delete(queue);
 
 	/* USER CODE END 2 */
 
 	/* Infinite loop */
 	/* USER CODE BEGIN WHILE */
-	while(1){
+	uint32_t timeout_ms[4];
+
+	struct{
+		GPIO_TypeDef* GPIOx;
+		uint16_t GPIO_Pin;
+	} leds[4] = {
+			[0] = { .GPIOx = LED_GREEN_GPIO_Port, 	.GPIO_Pin = LED_GREEN_Pin },
+			[1] = { .GPIOx = LED_ORANGE_GPIO_Port, 	.GPIO_Pin = LED_ORANGE_Pin },
+			[2] = { .GPIOx = LED_RED_GPIO_Port, 	.GPIO_Pin = LED_RED_Pin },
+			[3] = { .GPIOx = LED_BLUE_GPIO_Port, 	.GPIO_Pin = LED_BLUE_Pin }
+	};
+
+	while(1)
+	{
+		/* Control led for each philosopher
+		-----------------------------------------------*/
+		for(int i = 0; i < COUNTOF(philosopher); i++){
+			switch(philosopher_state[i]){
+				case PHILO_THINKING : {
+					timeout_ms[i] = os_getMsTick();
+					HAL_GPIO_WritePin(leds[i].GPIOx, leds[i].GPIO_Pin, 0);
+					break;
+				}
+
+				case PHILO_HUNGRY : {
+					uint32_t now = os_getMsTick();
+					if(now - timeout_ms[i] > 100){
+						timeout_ms[i] = now;
+						HAL_GPIO_TogglePin(leds[i].GPIOx, leds[i].GPIO_Pin);
+					}
+					break;
+				}
+
+				case PHILO_EATING : {
+					HAL_GPIO_WritePin(leds[i].GPIOx, leds[i].GPIO_Pin, 1);
+					break;
+				}
+
+				default : break;
+			}
+		}
 
 	}
 	/* USER CODE END 3 */
