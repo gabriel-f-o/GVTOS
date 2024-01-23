@@ -8,8 +8,8 @@
 #ifndef INC_OS_OS_TASKS_H_
 #define INC_OS_OS_TASKS_H_
 
-#include "OS/OS_Common.h"
-#include "OS/OS_Obj.h"
+#include "OS_Common.h"
+#include "OS_Obj.h"
 
 /**********************************************
  * PUBLIC TYPES

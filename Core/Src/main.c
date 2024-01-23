@@ -27,8 +27,9 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "OS/OS.h"
 #include "math.h"
+
+#include "OS/inc/OS.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/

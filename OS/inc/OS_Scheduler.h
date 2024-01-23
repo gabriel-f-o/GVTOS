@@ -8,7 +8,7 @@
 #ifndef INC_OS_OS_SCHEDULER_H_
 #define INC_OS_OS_SCHEDULER_H_
 
-#include "OS/OS_Common.h"
+#include "OS_Common.h"
 
 /**********************************************
  * PUBLIC TYPES

@@ -8,9 +8,9 @@
 #ifndef INC_OS_OS_INTERNAL_H_
 #define INC_OS_OS_INTERNAL_H_
 
-#include "OS/OS_Common.h"
-#include "OS/OS_Tasks.h"
-#include "OS/OS_MsgQ.h"
+#include "OS_Common.h"
+#include "OS_Tasks.h"
+#include "OS_MsgQ.h"
 
 /**********************************************
  * OS PRIVATE TYPES

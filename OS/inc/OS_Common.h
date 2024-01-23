@@ -13,7 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
-#include "OS/OS_Config.h"
+#include "OS_Config.h"
 
 /**********************************************
  * DEFINES
@@ -116,6 +116,6 @@ typedef enum{
 
 /* Include to link with cortex M4, must be at the end
  ---------------------------------------------------*/
-#include "OS/OS_cortexM4.h"
+#include "OS_cortexM4.h"
 
 #endif /* INC_OS_OS_COMMON_H_ */

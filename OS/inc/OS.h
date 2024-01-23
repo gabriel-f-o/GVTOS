@@ -8,17 +8,17 @@
 #ifndef INC_OS_OS_H_
 #define INC_OS_OS_H_
 
-#include "OS/OS_Common.h"
-#include "OS/OS_Heap.h"
-#include "OS/OS_Tasks.h"
-#include "OS/OS_Callbacks.h"
-#include "OS/OS_Tick.h"
-#include "OS/OS_Obj.h"
-#include "OS/OS_Scheduler.h"
-#include "OS/OS_Sem.h"
-#include "OS/OS_Mutex.h"
-#include "OS/OS_Event.h"
-#include "OS/OS_MsgQ.h"
+#include "OS_Common.h"
+#include "OS_Heap.h"
+#include "OS_Tasks.h"
+#include "OS_Callbacks.h"
+#include "OS_Tick.h"
+#include "OS_Obj.h"
+#include "OS_Scheduler.h"
+#include "OS_Sem.h"
+#include "OS_Mutex.h"
+#include "OS_Event.h"
+#include "OS_MsgQ.h"
 
 /**********************************************
  * PUBLIC FUNCTIONS
