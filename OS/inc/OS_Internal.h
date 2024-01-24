@@ -10,7 +10,6 @@
 
 #include "OS_Common.h"
 #include "OS_Tasks.h"
-#include "OS_MsgQ.h"
 
 /**********************************************
  * OS PRIVATE TYPES
@@ -231,18 +230,5 @@ bool os_task_list_isObjFreeOnTask(os_handle_t obj, os_handle_t task);
  * @return bool : 1 = current task must yield
  **********************************************************************/
 bool os_handle_list_updateAndCheck(os_handle_t h);
-
-
-/***********************************************************************
- * OS MsgQ update and check
- *
- * @brief This function updates the block list for a messageQ
- *
- * @param os_hMsgQ_t msgQ : [in] msgQ to update
- *
- * @return bool : (1) current task should yeild
- *
- **********************************************************************/
-bool os_msgQ_updateAndCheck(os_hMsgQ_t msgQ);
 
 #endif /* INC_OS_OS_INTERNAL_H_ */

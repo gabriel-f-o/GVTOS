@@ -34,11 +34,7 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-typedef enum{
-	PHILO_THINKING,
-	PHILO_HUNGRY,
-	PHILO_EATING,
-}philo_state_e;
+
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -57,48 +53,26 @@ typedef enum{
 #define ASSERT(x)	if( !(x) ) Error_Handler();
 #define COUNTOF(x)	(int) ((sizeof(x) / sizeof(*x)))
 
-static philo_state_e philosopher_state[4];
-static os_handle_t philosopher[4];
-static os_handle_t forks[4];
-
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 
 /* USER CODE BEGIN PFP */
-void* philosopher_fn(int argc, char* argv[]){
-
-	int i = (int) argc;
-	while(1)
-	{
-		/* Thinking
-		-----------------------------------------------*/
-		philosopher_state[i] = PHILO_THINKING;
-		uint32_t thinkTime_s = (uint32_t)((rand() % 4000) + 1000); // 1 to 5s;
-		os_task_sleep(thinkTime_s);
-
-		/* Hungry
-		-----------------------------------------------*/
-		philosopher_state[i] = PHILO_HUNGRY;
-		os_obj_multiple_WaitAll(NULL, OS_WAIT_FOREVER, 2, forks[i], forks[i == 0 ? COUNTOF(forks) - 1 : i - 1]);
-
-		/* Eating
-		-----------------------------------------------*/
-		philosopher_state[i] = PHILO_EATING;
-		uint32_t eatTime_s = (uint32_t)((rand() % 2000) + 1000); // 1 to 3s;
-		os_task_sleep(eatTime_s);
-
-		os_mutex_release(forks[i]);
-		os_mutex_release(forks[i == 0 ? COUNTOF(forks) - 1 : i - 1]);
-	}
-
-	return NULL;
-}
+os_handle_t msgQ;
+os_handle_t msgQ2;
+os_handle_t msgQ3;
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+int cont;
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+	os_handle_t v[] = { msgQ, msgQ2, msgQ3 };
+	os_msgQ_push(v[cont % 3], (void*)cont);
+	cont++;
+}
 
 /* USER CODE END 0 */
 
@@ -135,14 +109,9 @@ int main(void)
 
 	ASSERT(os_init("main", 9, OS_DEFAULT_STACK_SIZE, "idle", OS_DEFAULT_STACK_SIZE) == OS_ERR_OK);
 
-	for(int i = 0; i < COUNTOF(philosopher); i++){
-		char name[50];
-		snprintf(name, sizeof(name), "Philo %d", i);
-		ASSERT(os_task_create(&philosopher[i], name, philosopher_fn, OS_TASK_MODE_DELETE, (int8_t)(10) , OS_DEFAULT_STACK_SIZE, (void*) i, NULL) == OS_ERR_OK);
-
-		snprintf(name, sizeof(name), "Mux %d", i);
-		ASSERT(os_mutex_create(&forks[i], name) == OS_ERR_OK);
-	}
+	ASSERT(os_msgQ_create(&msgQ, OS_MSGQ_MODE_FIFO, NULL) == OS_ERR_OK);
+	ASSERT(os_msgQ_create(&msgQ2, OS_MSGQ_MODE_FIFO, NULL) == OS_ERR_OK);
+	ASSERT(os_msgQ_create(&msgQ3, OS_MSGQ_MODE_FIFO, NULL) == OS_ERR_OK);
 
 	os_scheduler_start();
 
@@ -150,48 +119,27 @@ int main(void)
 
 	/* Infinite loop */
 	/* USER CODE BEGIN WHILE */
-	uint32_t timeout_ms[4];
-
-	struct{
-		GPIO_TypeDef* GPIOx;
-		uint16_t GPIO_Pin;
-	} leds[4] = {
-			[0] = { .GPIOx = LED_GREEN_GPIO_Port, 	.GPIO_Pin = LED_GREEN_Pin },
-			[1] = { .GPIOx = LED_ORANGE_GPIO_Port, 	.GPIO_Pin = LED_ORANGE_Pin },
-			[2] = { .GPIOx = LED_RED_GPIO_Port, 	.GPIO_Pin = LED_RED_Pin },
-			[3] = { .GPIOx = LED_BLUE_GPIO_Port, 	.GPIO_Pin = LED_BLUE_Pin }
-	};
 
 	while(1)
 	{
-		/* Control led for each philosopher
-		-----------------------------------------------*/
-		for(int i = 0; i < COUNTOF(philosopher); i++){
-			switch(philosopher_state[i]){
-				case PHILO_THINKING : {
-					timeout_ms[i] = os_getMsTick();
-					HAL_GPIO_WritePin(leds[i].GPIOx, leds[i].GPIO_Pin, 0);
-					break;
-				}
-
-				case PHILO_HUNGRY : {
-					uint32_t now = os_getMsTick();
-					if(now - timeout_ms[i] > 100){
-						timeout_ms[i] = now;
-						HAL_GPIO_TogglePin(leds[i].GPIOx, leds[i].GPIO_Pin);
-					}
-					break;
-				}
-
-				case PHILO_EATING : {
-					HAL_GPIO_WritePin(leds[i].GPIOx, leds[i].GPIO_Pin, 1);
-					break;
-				}
-
-				default : break;
-			}
+		void* ret = os_obj_multiple_WaitOne(NULL, OS_WAIT_FOREVER, 3, msgQ, msgQ2, msgQ3);
+		if(ret == msgQ){
+			void* msg = os_msgQ_pop(msgQ, NULL);
+			(void)msg;
+			printf("%d", (int)msg);
 		}
 
+		if(ret == msgQ2){
+			void* msg = os_msgQ_pop(msgQ2, NULL);
+			(void)msg;
+			printf("%d", (int)msg);
+		}
+
+		if(ret == msgQ3){
+			void* msg = os_msgQ_pop(msgQ3, NULL);
+			(void)msg;
+			printf("%d", (int)msg);
+		}
 	}
 	/* USER CODE END 3 */
 }
