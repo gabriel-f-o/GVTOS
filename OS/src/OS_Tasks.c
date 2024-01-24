@@ -179,12 +179,7 @@ os_err_e os_task_init(char* main_name, int8_t main_task_priority, uint32_t inter
 	t->obj.getFreeCount		= &os_task_getFreeCount;
 	t->obj.blockList		= os_list_init();
 	t->obj.obj_take			= &os_task_objTake;
-	if(main_name != NULL){
-		strncpy(t->obj.name, (char*)main_name, sizeof(t->obj.name));
-		t->obj.name[sizeof(t->obj.name) - 1] = '\0';
-	}
-	else
-		t->obj.name[0] = '\0';
+	t->obj.name				= main_name == NULL ? NULL : (char*)os_heap_alloc(strlen(main_name));
 
 	t->basePriority 		= main_task_priority;
 	t->priority		    	= main_task_priority;
@@ -203,32 +198,29 @@ os_err_e os_task_init(char* main_name, int8_t main_task_priority, uint32_t inter
 
 	/* Handles heap errors
 	 ------------------------------------------------------*/
-	if(t->obj.blockList == NULL || t->ownedMutex == NULL){
-		os_heap_free(t);
-		os_list_clear(t->obj.blockList);
-		os_list_clear(t->ownedMutex);
-		return OS_ERR_INSUFFICIENT_HEAP;
+	if(t->obj.blockList == NULL || t->ownedMutex == NULL || (t->obj.name == NULL && main_name != NULL) ){
+		ret = OS_ERR_INSUFFICIENT_HEAP;
+		goto freeTask;
 	}
+
+	/* Copy name
+	 ------------------------------------------------------*/
+	if(main_name != NULL)
+		strcpy(t->obj.name, main_name);
 
 	/* Init head list and Add main task
 	 ------------------------------------------------------*/
 	ret = os_list_add(&os_head, (os_handle_t) t, OS_LIST_FIRST);
 	if(t->obj.blockList == NULL || t->ownedMutex == NULL || ret != OS_ERR_OK) {
-		os_heap_free(t);
-		os_list_clear(t->obj.blockList);
-		os_list_clear(t->ownedMutex);
-		return OS_ERR_INSUFFICIENT_HEAP;
+		ret = OS_ERR_INSUFFICIENT_HEAP;
+		goto freeTask;
 	}
 
 	/* Add object to object list
 	 ------------------------------------------------------*/
 	ret = os_list_add(&os_obj_head, (os_handle_t) t, OS_LIST_FIRST);
 	if(ret != OS_ERR_OK) {
-		os_heap_free(t);
-		os_list_clear(t->obj.blockList);
-		os_list_clear(t->ownedMutex);
-		os_list_remove(&os_head, (os_handle_t) t);
-		return ret;
+		goto freeAll;
 	}
 
 	/* Point to current task
@@ -241,6 +233,18 @@ os_err_e os_task_init(char* main_name, int8_t main_task_priority, uint32_t inter
 
 	/* Init idle task
 	 ------------------------------------------------------*/
+	return ret;
+
+freeAll:
+	os_list_remove(&os_head, (os_handle_t) t);
+
+freeTask:
+	os_list_clear(t->obj.blockList);
+	os_list_clear(t->ownedMutex);
+	os_heap_free(t->obj.name);
+	os_heap_free(t);
+
+
 	return ret;
 }
 
@@ -324,7 +328,7 @@ os_err_e os_task_create(os_handle_t* h, char const * name, void* (*fn)(int argc,
 
 	/* Check allocation
 	 ------------------------------------------------------*/
-	if(t == 0) return OS_ERR_INSUFFICIENT_HEAP;
+	if(t == NULL) return OS_ERR_INSUFFICIENT_HEAP;
 
 	/* Alloc the stack
 	 ------------------------------------------------------*/
@@ -361,13 +365,7 @@ os_err_e os_task_create(os_handle_t* h, char const * name, void* (*fn)(int argc,
 	t->obj.getFreeCount	= &os_task_getFreeCount;
 	t->obj.blockList	= os_list_init();
 	t->obj.obj_take		= &os_task_objTake;
-
-	if(name != NULL){
-		strncpy(t->obj.name, (char*)name, sizeof(t->obj.name));
-		t->obj.name[sizeof(t->obj.name) - 1] = '\0';
-	}
-	else
-		t->obj.name[0] = '\0';
+	t->obj.name			= name == NULL ? NULL : (char*)os_heap_alloc(strlen(name));
 
 	t->fnPtr			= fn;
 	t->basePriority		= priority;
@@ -409,35 +407,30 @@ os_err_e os_task_create(os_handle_t* h, char const * name, void* (*fn)(int argc,
 
 	/* Handles any heap errors
 	 ------------------------------------------------------*/
-	if(t->obj.blockList == NULL || t->ownedMutex == NULL){
-		os_heap_free(t);
-		os_heap_free((void*)stk);
-		os_list_clear(t->obj.blockList);
-		os_list_clear(t->ownedMutex);
-		return OS_ERR_INSUFFICIENT_HEAP;
+	os_err_e ret = OS_ERR_OK;
+	if(t->obj.blockList == NULL || t->ownedMutex == NULL || (t->obj.name == NULL && name != NULL) ){
+		ret = OS_ERR_INSUFFICIENT_HEAP;
+		goto freeTask;
 	}
+
+	/* Copy name
+	 ------------------------------------------------------*/
+	if(name != NULL)
+		strcpy(t->obj.name, name);
 
 	/* Add task to list
 	 ------------------------------------------------------*/
 	os_err_e err = os_list_add(&os_head, (os_handle_t)t, OS_LIST_FIRST);
 	if(err != OS_ERR_OK) {
-		os_heap_free(t);
-		os_heap_free((void*)stk);
-		os_list_clear(t->obj.blockList);
-		os_list_clear(t->ownedMutex);
-		return OS_ERR_INSUFFICIENT_HEAP;
+		ret = OS_ERR_INSUFFICIENT_HEAP;
+		goto freeTask;
 	}
 
 	/* Add object to object list
 	 ------------------------------------------------------*/
-	os_err_e ret = os_list_add(&os_obj_head, (os_handle_t) t, OS_LIST_FIRST);
+	ret = os_list_add(&os_obj_head, (os_handle_t) t, OS_LIST_FIRST);
 	if(ret != OS_ERR_OK) {
-		os_heap_free(t);
-		os_heap_free((void*)stk);
-		os_list_clear(t->obj.blockList);
-		os_list_clear(t->ownedMutex);
-		os_list_remove(&os_head, (os_handle_t)t);
-		return ret;
+		goto freeAll;
 	}
 
 	/* Calculate task priority
@@ -454,6 +447,18 @@ os_err_e os_task_create(os_handle_t* h, char const * name, void* (*fn)(int argc,
 	*h = ( (err == OS_ERR_OK) ? (os_handle_t) t : NULL );
 
 	return err;
+
+freeAll:
+	os_list_remove(&os_head, (os_handle_t)t);
+
+freeTask:
+	os_list_clear(t->obj.blockList);
+	os_list_clear(t->ownedMutex);
+	os_heap_free(t->obj.name);
+	os_heap_free(t);
+	os_heap_free((void*)stk);
+
+	return ret;
 }
 
 /***********************************************************************
@@ -669,6 +674,7 @@ os_err_e os_task_delete(os_handle_t h){
 
 	/* Delete task
 	 ------------------------------------------------------*/
+	os_heap_free(h->name);
 	os_heap_free(h);
 
 	/* Return

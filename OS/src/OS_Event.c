@@ -142,15 +142,7 @@ os_err_e os_evt_create(os_handle_t* h, os_evt_reset_mode_e mode, char const * na
 	evt->obj.getFreeCount	= os_evt_getFreeCount;
 	evt->obj.obj_take		= os_evt_objTake;
 	evt->obj.blockList		= os_list_init();
-
-	/* Copy name
-	 ------------------------------------------------------*/
-	if(name != NULL){
-		strncpy(evt->obj.name, (char*)name, sizeof(evt->obj.name));
-		evt->obj.name[sizeof(evt->obj.name) - 1] = '\0';
-	}
-	else
-		evt->obj.name[0] = '\0';
+	evt->obj.name			= name == NULL ? NULL : (char*)os_heap_alloc(strlen(name));
 
 	/* Finish init
 	 ------------------------------------------------------*/
@@ -159,18 +151,26 @@ os_err_e os_evt_create(os_handle_t* h, os_evt_reset_mode_e mode, char const * na
 
 	/* Handles heap errors
 	 ------------------------------------------------------*/
-	if(evt->obj.blockList == NULL){
+	if(evt->obj.blockList == NULL || (evt->obj.name == NULL && name != NULL) ){
+		os_list_clear(evt->obj.blockList);
+		os_heap_free(evt->obj.name);
 		os_heap_free(evt);
 		return OS_ERR_INSUFFICIENT_HEAP;
 	}
+
+	/* Copy name
+	 ------------------------------------------------------*/
+	if(name != NULL)
+		strcpy(evt->obj.name, name);
 
 	/* Add object to object list
 	 ------------------------------------------------------*/
 	os_err_e ret = os_list_add(&os_obj_head, (os_handle_t) evt, OS_LIST_FIRST);
 	if(ret != OS_ERR_OK) {
-		os_heap_free(evt);
 		os_list_clear(evt->obj.blockList);
-		return OS_ERR_INSUFFICIENT_HEAP;
+		os_heap_free(evt->obj.name);
+		os_heap_free(evt);
+		return ret;
 	}
 
 	/* Return
@@ -343,6 +343,7 @@ os_err_e os_evt_delete(os_handle_t h){
 	/* Free memory
 	 ------------------------------------------------------*/
 	os_list_clear(h->blockList);
+	os_heap_free(h->name);
 
 	return os_heap_free(h);
 }

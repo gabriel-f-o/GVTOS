@@ -101,38 +101,38 @@ os_err_e os_msgQ_create(os_hMsgQ_t* msgQ, os_msgQ_mode_e mode, char const * name
 	q->obj.getFreeCount		= os_msgQ_getFreeCount;
 	q->obj.obj_take 		= os_msgQ_objTake;
 	q->obj.blockList		= os_list_init();
-
-	/* Copy name
-	 ------------------------------------------------------*/
-	if(name != NULL){
-		strncpy(q->obj.name, (char*)name, sizeof(q->obj.name));
-		q->obj.name[sizeof(q->obj.name) - 1] = '\0';
-	}
-	else
-		q->obj.name[0] = '\0';
+	q->obj.name				= name == NULL ? NULL : (char*)os_heap_alloc(strlen(name));
 
 	/* Finish init
 	 ------------------------------------------------------*/
-
 	q->msgList		 		= os_list_init();
 	q->mode		 			= mode;
 
 	/* Handles heap errors
 	 ------------------------------------------------------*/
-	if(q->obj.blockList == NULL || q->msgList == NULL){
-		os_heap_free(q);
+	if(q->obj.blockList == NULL || q->msgList == NULL || (q->obj.name == NULL && name != NULL) ){
 		os_list_clear(q->obj.blockList);
 		os_list_clear(q->msgList);
+		os_heap_free(q->obj.name);
+		os_heap_free(q);
+
 		return OS_ERR_INSUFFICIENT_HEAP;
 	}
+
+	/* Copy name
+	 ------------------------------------------------------*/
+	if(name != NULL)
+		strcpy(q->obj.name, name);
 
 	/* Add object to object list
 	 ------------------------------------------------------*/
 	os_err_e ret = os_list_add(&os_obj_head, (os_handle_t) q, OS_LIST_FIRST);
 	if(ret != OS_ERR_OK) {
-		os_heap_free(q);
 		os_list_clear(q->obj.blockList);
 		os_list_clear(q->msgList);
+		os_heap_free(q->obj.name);
+		os_heap_free(q);
+
 		return ret;
 	}
 
@@ -140,8 +140,6 @@ os_err_e os_msgQ_create(os_hMsgQ_t* msgQ, os_msgQ_mode_e mode, char const * name
 	 ------------------------------------------------------*/
 	*msgQ = q;
 	return OS_ERR_OK;
-
-
 }
 
 
@@ -203,6 +201,7 @@ os_err_e os_msgQ_delete(os_hMsgQ_t msgQ){
 	/* Free msg list
 	 ------------------------------------------------------*/
 	os_list_clear(msgQ->msgList);
+	os_heap_free(msgQ->name);
 
 	return os_heap_free(msgQ);
 }

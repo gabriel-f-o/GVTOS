@@ -131,36 +131,35 @@ os_err_e os_mutex_create(os_handle_t* h, char const * name){
 	mutex->obj.getFreeCount		= os_mutex_getFreeCount;
 	mutex->obj.obj_take			= os_mutex_objTake;
 	mutex->obj.blockList		= os_list_init();
-
-	/* Copy name
-	 ------------------------------------------------------*/
-	if(name != NULL){
-		strncpy(mutex->obj.name, (char*)name, sizeof(mutex->obj.name));
-		mutex->obj.name[sizeof(mutex->obj.name) - 1] = '\0';
-	}
-	else
-		mutex->obj.name[0] = '\0';
+	mutex->obj.name			    = name == NULL ? NULL : (char*)os_heap_alloc(strlen(name));
 
 	/* Finish init
 	 ------------------------------------------------------*/
-
 	mutex->state 				= OS_MUTEX_STATE_UNLOCKED;
 	mutex->owner 				= NULL;
 	mutex->max_prio 			= -1;
 
 	/* Handles heap errors
 	 ------------------------------------------------------*/
-	if(mutex->obj.blockList == NULL){
+	if(mutex->obj.blockList == NULL || (mutex->obj.name == NULL && name != NULL) ){
+		os_list_clear(mutex->obj.blockList);
+		os_heap_free(mutex->obj.name);
 		os_heap_free(mutex);
 		return OS_ERR_INSUFFICIENT_HEAP;
 	}
+
+	/* Copy name
+	 ------------------------------------------------------*/
+	if(name != NULL)
+		strcpy(mutex->obj.name, name);
 
 	/* Add object to object list
 	 ------------------------------------------------------*/
 	os_err_e ret = os_list_add(&os_obj_head, (os_handle_t) mutex, OS_LIST_FIRST);
 	if(ret != OS_ERR_OK) {
-		os_heap_free(mutex);
 		os_list_clear(mutex->obj.blockList);
+		os_heap_free(mutex->obj.name);
+		os_heap_free(mutex);
 		return ret;
 	}
 
@@ -247,6 +246,7 @@ os_err_e os_mutex_delete(os_handle_t h){
 	/* Free memory
 	 ------------------------------------------------------*/
 	os_list_clear(h->blockList);
+	os_heap_free(h->name);
 
 	return os_heap_free(h);
 }

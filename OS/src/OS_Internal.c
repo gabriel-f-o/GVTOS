@@ -293,7 +293,7 @@ os_list_cell_t* os_handle_list_searchByName(os_list_head_t* head, os_obj_type_e 
 
 		/* If type and name match, we break.
 		 ------------------------------------------------------*/
-		if( ((os_handle_t)(it->element))->type == type && ((os_handle_t)(it->element))->name[0] != '\0' && strcmp(name, ((os_handle_t)(it->element))->name) == 0) break;
+		if( ((os_handle_t)(it->element))->type == type && ((os_handle_t)(it->element))->name != NULL && strcmp(name, ((os_handle_t)(it->element))->name) == 0) break;
 
 		/* Otherwise we go to next one
 		 ------------------------------------------------------*/
