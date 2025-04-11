@@ -31,10 +31,10 @@ extern os_list_head_t  os_obj_head;	//Head to obj list
  * @return uint32_t : the amount of times the object can be taken
  *
  **********************************************************************/
-static uint32_t os_mutex_getFreeCount(os_handle_t h){
-
+static uint32_t os_mutex_getFreeCount(os_handle_t h, os_handle_t takingTask){   
 	/* Check arguments
 	 ------------------------------------------------------*/
+    UNUSED_ARG(takingTask);
 	if(h == NULL) return 0;
 	if(h->type != OS_OBJ_MUTEX) return 0;
 

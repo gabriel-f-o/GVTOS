@@ -137,14 +137,15 @@ __used static void os_scheduler(){
 
 	/* Enter Critical -> If the list is changed during the process, this can corrupt our references
 	 ------------------------------------------------------*/
-	__disable_irq();
+	__os_disable_irq();
 
 	/* Save current task stack into task memory block
 	 ------------------------------------------------------*/
 	register uint32_t volatile psp = 0;
 	__asm volatile ("mrs %[out], psp" : [out] "=r" (psp));
 
-	if(os_cur_task != NULL) ((os_task_t*)os_cur_task->element)->pStack = (uint32_t*)psp;
+	if(os_cur_task != NULL)
+		((os_task_t*)os_cur_task->element)->pStack = (uint32_t*)psp;
 
 	/* Save last task
 	 ------------------------------------------------------*/
@@ -161,17 +162,33 @@ __used static void os_scheduler(){
 		/* Call CB if needed
 		 ------------------------------------------------------*/
 		if(os_cur_task == NULL) {
-			__enable_irq();
+			__os_enable_irq();
 			os_no_task_ready_cb();
-			__disable_irq();
+			__os_disable_irq();
 		}
 
 	}while(os_cur_task == NULL);
+
+#ifdef __OS_CORTEX_M33
+	/* Put PSPLIM to the minimum of the last and current task  
+	 ------------------------------------------------------*/
+	register uint32_t volatile psplim = 0;
+	__asm volatile ("mrs %[out], psplim" : [out] "=r" (psplim));
+	uint32_t new_psplim = ((os_task_t*)os_cur_task->element)->stackBase - ((os_task_t*)os_cur_task->element)->stackSize;
+	register uint32_t volatile min_psplim = psplim < new_psplim ? psplim : new_psplim;
+	__asm volatile ("msr psplim, %[in]" : : [in] "r" (min_psplim));
+#endif
 
 	/* Write task stack location into current stack
 	 ------------------------------------------------------*/
 	psp = (uint32_t) ((os_task_t*)os_cur_task->element)->pStack;
 	__asm volatile ("msr psp, %[in]" : : [in] "r" (psp));
+
+#ifdef __OS_CORTEX_M33
+	/* Put PSPLIM to new task
+	 ------------------------------------------------------*/
+	__asm volatile ("msr psplim, %[in]" : : [in] "r" (new_psplim));
+#endif
 
 	/* If last task is deleting state, remove it
 	 ------------------------------------------------------*/
@@ -179,7 +196,7 @@ __used static void os_scheduler(){
 
 	/* Enable IRQ
 	 ------------------------------------------------------*/
-	__enable_irq();
+	__os_enable_irq();
 
 }
 

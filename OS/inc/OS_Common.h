@@ -76,12 +76,12 @@
 #define __used __attribute__((used))
 #endif
 
-#ifndef __disable_irq
-#define __disable_irq() 	__asm volatile ("cpsid i" : : : "memory");
+#ifndef __os_disable_irq
+#define __os_disable_irq() 	__asm volatile ("cpsid i" : : : "memory");
 #endif
 
-#ifndef __enable_irq
-#define __enable_irq() 		__asm volatile ("cpsie i" : : : "memory");
+#ifndef __os_enable_irq
+#define __os_enable_irq() 	__asm volatile ("cpsie i" : : : "memory");
 #endif
 
 #ifndef __align
@@ -107,6 +107,7 @@ typedef enum{
 	OS_ERR_FORBIDDEN,
 	OS_ERR_TIMEOUT,
 	OS_ERR_UNKNOWN,
+    OS_ERR_EMPTY,
 } os_err_e;
 
 
@@ -114,8 +115,14 @@ typedef enum{
  * MCU includes
  *********************************************/
 
-/* Include to link with cortex M4, must be at the end
+/* Include to link with cpu, must be at the end
  ---------------------------------------------------*/
+#ifdef __OS_CORTEX_M4
 #include "OS_cortexM4.h"
+#elif defined(__OS_CORTEX_M33)
+#include "OS_cortexM33.h"
+#else
+#error "Please select a supported CPU"
+#endif
 
 #endif /* INC_OS_OS_COMMON_H_ */

@@ -447,7 +447,8 @@ os_err_e os_list_remove(os_list_head_t* head, void* el){
 	/* Kill cell
 	 ------------------------------------------------------*/
 	pPrev->next = pPrev->next->next;
-	if(pCell->next != NULL) pCell->next->prev = pCell->prev;
+	if(pCell->next != NULL) 
+        pCell->next->prev = pCell->prev;
 
 	/* Reduce size and return
 	 ------------------------------------------------------*/
@@ -635,6 +636,9 @@ void os_task_list_sort(os_list_head_t* head){
 				pN1->next = pN2->next;
 				pN2->next = pN1;
 
+                pN2->prev = pN1->prev;
+                pN1->prev = pN2;
+
 				changeMade = 1;
 
 			}
@@ -691,9 +695,13 @@ bool os_task_list_isObjFreeOnTask(os_handle_t obj, os_handle_t task){
 	OS_DECLARE_IRQ_STATE;
 	OS_ENTER_CRITICAL();
 
-	/* Get current free count
+	/* Get current free count and return if topic
 	 ---------------------------------------------------*/
-	uint32_t freeCount = obj->getFreeCount(obj);
+	uint32_t freeCount = obj->getFreeCount(obj, task);
+	if(obj->type == OS_OBJ_TOPIC){
+        OS_EXIT_CRITICAL();
+		return freeCount > 0;
+    }
 
 	/* If it is 0, return 0 immediately
 	 ---------------------------------------------------*/
@@ -815,7 +823,7 @@ bool os_handle_list_updateAndCheck(os_handle_t h){
 
 		/* Get the number of times we can get the object
 		 ---------------------------------------------------*/
-		uint32_t freeCount = h->getFreeCount(h);
+		uint32_t freeCount = h->type == OS_OBJ_TOPIC ? 0 : h->getFreeCount(h, NULL);
 
 		/* Updates every task on the block list
 		 ---------------------------------------------------*/
@@ -825,6 +833,10 @@ bool os_handle_list_updateAndCheck(os_handle_t h){
 			 ---------------------------------------------------*/
 			os_task_t* t = (os_task_t*)it->element;
 			if(t->state == OS_TASK_DELETING || t->state == OS_TASK_ENDED) continue;
+
+			if(h->type == OS_OBJ_TOPIC){
+				freeCount = h->getFreeCount(h, (os_handle_t) t);
+			}
 
 			/* If the task is only waiting one object
 			 ---------------------------------------------------*/

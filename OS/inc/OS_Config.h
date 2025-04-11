@@ -12,6 +12,12 @@
  * BASIC CONFIGURATIONS
  *************************************************/
 
+/* Chose CPU type, supported values are
+ * __OS_CORTEX_M4
+ * __OS_CORTEX_M33
+ ---------------------------------------------------*/
+#define __OS_CORTEX_M4
+
 /* Maximum name length for object's names
  ---------------------------------------------------*/
 #define OS_NAME_MAX_LEN							20

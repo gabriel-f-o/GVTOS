@@ -92,7 +92,7 @@ static os_handle_t os_obj_wait(os_handle_t objList[], size_t objNum, os_obj_wait
 
 			/* Get free count
 			 ---------------------------------------------------*/
-			uint32_t freeCount = ( (objList[i]->getFreeCount != NULL) ? objList[i]->getFreeCount(objList[i]) : 1 );
+			uint32_t freeCount = ( (objList[i]->getFreeCount != NULL) ? objList[i]->getFreeCount(objList[i], os_cur_task->element) : 1 );
 
 			/* Update flag to use if we should wait all
 			 ---------------------------------------------------*/
@@ -134,7 +134,7 @@ static os_handle_t os_obj_wait(os_handle_t objList[], size_t objNum, os_obj_wait
 
 					/* Releases any mutex taken
 					 ---------------------------------------------------*/
-					for(int j = 0; j < i; j++){
+					for(size_t j = 0; j < i; j++){
 						if(objList[j]->type == OS_OBJ_MUTEX){
 							os_mutex_release(objList[j]);
 						}
@@ -353,7 +353,7 @@ static os_handle_t os_obj_wait(os_handle_t objList[], size_t objNum, os_obj_wait
 
 		/* Reenable interrupts
 		 ---------------------------------------------------*/
-		__enable_irq();
+		__os_enable_irq();
 
 		/* This line will be executed once the task is woken up by object freeing or timeout
 		 * The object freeing means that the object was freed and this task was the chosen to wake up

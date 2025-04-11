@@ -5,13 +5,8 @@
  *      Author: Gabriel
  */
 
-#include "../inc/OS_Config.h"
-#include "../inc/OS_Common.h"
-#include "../inc/OS_Tick.h"
-#include "../inc/OS_Tasks.h"
+#include "../inc/OS.h"
 #include "../inc/OS_Internal.h"
-#include "../inc/OS_Obj.h"
-#include "../inc/OS_Scheduler.h"
 
 /**********************************************
  * EXTERNAL VARIABLES
@@ -51,6 +46,8 @@ uint32_t os_getMsTick(){
  *
  **********************************************************************/
 void os_tick(uint32_t ms_inc){
+	if(!os_init_get())
+		return;
 
 	/* Enter Critical -> If the list is changed during the process, this can corrupt our references
 	 ------------------------------------------------------*/
@@ -101,7 +98,8 @@ void os_tick(uint32_t ms_inc){
 
 	/* PendSV if necessary
 	 ------------------------------------------------------*/
-	if(pend_req == 1 && os_scheduler_state_get() == OS_SCHEDULER_START) os_task_yeild();
+	if(pend_req == 1 && os_scheduler_state_get() == OS_SCHEDULER_START) 
+		os_task_yeild();
 
 	/* Return
 	 ------------------------------------------------------*/

@@ -19,6 +19,7 @@
 #include "OS_Mutex.h"
 #include "OS_Event.h"
 #include "OS_MsgQ.h"
+#include "OS_Topic.h"
 
 /**********************************************
  * PUBLIC FUNCTIONS

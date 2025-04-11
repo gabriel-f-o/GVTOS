@@ -26,10 +26,10 @@ extern os_list_head_t os_obj_head;	//Head to obj list
  * @param os_handle_t h : [in] object to verify the availability
  *
  **********************************************************************/
-static uint32_t os_sem_getFreeCount(os_handle_t h){
-
+static uint32_t os_sem_getFreeCount(os_handle_t h, os_handle_t takingTask){   
 	/* Check arguments
 	 ------------------------------------------------------*/
+    UNUSED_ARG(takingTask);
 	if(h == NULL) return 0;
 	if(h->type != OS_OBJ_SEM) return 0;
 

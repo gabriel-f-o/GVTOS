@@ -55,30 +55,37 @@ static os_err_e os_task_init_stack(uint32_t interruptStackSize){
 
 	/* Check if allocation was OK
 	 ------------------------------------------------------*/
-	if(stk == 0) return OS_ERR_INSUFFICIENT_HEAP;
+	if(stk == 0) 
+		return OS_ERR_INSUFFICIENT_HEAP;
 
 	/* Save context and make PSP = MSP
 	 ------------------------------------------------------*/
-	__asm volatile ("push {r6, lr}"); 		//Save R6 and LR
-	__asm volatile ("mrs r6, msp"); 		//R6 = MSP
-	__asm volatile ("msr psp, r6"); 		//PSP = R6
+	register uint32_t volatile mspReg = (uint32_t) ( (stk + interruptStackSize) & (~0x7UL) ); //logic and to guarantee that we are word aligned
+	__asm volatile ("mrs r1, msp"); 		//R1 = MSP
+	__asm volatile ("msr psp, r1"); 		//PSP = R1
 
 	/* Position MSP to interrput stack
 	 ------------------------------------------------------*/
-	uint32_t volatile mspReg = (uint32_t) ( (stk + interruptStackSize) & (~0x7UL) ); //logic and to guarantee that we are word aligned
-	__asm volatile ("mov r6, %[in]" : : [in] "r" (mspReg)); //R6 = mspReg
-	__asm volatile ("msr msp, r6"); //MSP = R6
+	__asm volatile ("mov r1, %[in]" : : [in] "r" (mspReg)); //R1 = mspReg
+	__asm volatile ("msr msp, r1"); //MSP = R1
 
 	/* Select PSP as current stack pointer
 	 ------------------------------------------------------*/
-	__asm volatile ("mrs r6, control");		//R6 = CTRL
-	__asm volatile ("orr r6, r6, #0x2");	//R6 |= 0x2
-	__asm volatile ("msr control, r6");		//CTRL = R6
+	__asm volatile ("mrs r1, control");		//R1 = CTRL
+	__asm volatile ("orr r1, r1, #0x2");	//R1 |= 0x2
+
+	__asm volatile ("msr control, r1");		//CTRL = R1
+
+#ifdef __OS_CORTEX_M33
+	/* Set msplimit
+	 ------------------------------------------------------*/
+	register uint32_t volatile msplim = (uint32_t)stk;
+	__asm volatile ("mov r1, %[in]" : : [in] "r" (msplim)); //R1 = msplim
+	__asm volatile ("msr msplim, r1"); 		//MSPLIM = R1
+#endif
 
 	/* Recover stack
 	 ------------------------------------------------------*/
-	__asm volatile ("pop {r6, lr}");
-
 	return OS_ERR_OK;
 }
 
@@ -94,10 +101,10 @@ static os_err_e os_task_init_stack(uint32_t interruptStackSize){
  * @return uint32_t : the amount of times the object can be taken
  *
  **********************************************************************/
-static uint32_t os_task_getFreeCount(os_handle_t h){
-
+static uint32_t os_task_getFreeCount(os_handle_t h, os_handle_t takingTask){
 	/* Check arguments
 	 ------------------------------------------------------*/
+    UNUSED_ARG(takingTask);
 	if(h == NULL) return 0;
 	if(h->type != OS_OBJ_TASK) return 0;
 
@@ -305,13 +312,13 @@ bool os_task_must_yeild(){
  * @param os_task_mode_e mode					: [ in] Inform what the task should do when returning (delete or keep the task block to get its return value; ATTENTION : in mode RETURN the user must use os_task_delete to avoid leaks
  * @param int8_t priority						: [ in] A priority to the task (0 is lowest priority) cannot be negative
  * @param uint32_t stack_size 					: [ in] The amount of stack to be reserved. A minimum of 128 bytes is required
- * @param void* argc							: [ in] First argument to be passed to the task (used for argc)
- * @param void* argv							: [ in] Second argument to be passed to the task (used for argv)
+ * @param int argc							    : [ in] First argument to be passed to the task (used for argc)
+ * @param char* argv[]							: [ in] Second argument to be passed to the task (used for argv)
  *
  * @return os_err_e : An error code (0 = OK)
  *
  **********************************************************************/
-os_err_e os_task_create(os_handle_t* h, char const * name, void* (*fn)(int argc, char* argv[]), os_task_mode_e mode, int8_t priority, uint32_t stack_size, void* argc, void* argv){
+os_err_e os_task_create(os_handle_t* h, char const * name, void* (*fn)(int argc, char* argv[]), os_task_mode_e mode, int8_t priority, uint32_t stack_size, int argc, char** argv){
 
 	/* Check for argument errors
 	 ------------------------------------------------------*/
@@ -321,6 +328,16 @@ os_err_e os_task_create(os_handle_t* h, char const * name, void* (*fn)(int argc,
 	if(mode >= __OS_TASK_MODE_MAX) 			return OS_ERR_BAD_ARG;
 	if(stack_size < OS_MINIMUM_STACK_SIZE)  return OS_ERR_BAD_ARG;
 	if(os_init_get() == false)				return OS_ERR_NOT_READY;
+
+	/* If task exists, return it
+	 ------------------------------------------------------*/
+	if(name != NULL){
+		os_list_cell_t* obj = os_handle_list_searchByName(&os_obj_head, OS_OBJ_TASK, name);
+		if(obj != NULL){
+			*h = obj->element;
+			return OS_ERR_OK;
+		}
+	}
 
 	/* Alloc the task block
 	 ------------------------------------------------------*/
@@ -518,7 +535,7 @@ os_err_e os_task_return(void* retVal){
 
 		/* Enable IRQ no matter what
 		 ------------------------------------------------------*/
-		__enable_irq();
+		__os_enable_irq();
 
 	}
 
@@ -595,7 +612,7 @@ os_err_e os_task_delete(os_handle_t h){
 
 			/* Enable IRQ no matter what
 			 ------------------------------------------------------*/
-			__enable_irq();
+			__os_enable_irq();
 
 		}
 
@@ -752,7 +769,7 @@ os_err_e os_task_sleep(uint32_t sleep_ticks){
 
 	/* Enter Critical -> If the list is changed during the process, this can corrupt our references
 	 ------------------------------------------------------*/
-	__disable_irq();
+	__os_disable_irq();
 
 	/* Put task to blocked and change countdown
 	 ------------------------------------------------------*/
@@ -765,7 +782,7 @@ os_err_e os_task_sleep(uint32_t sleep_ticks){
 
 	/* Enable IRQ no matter what
 	 ------------------------------------------------------*/
-	__enable_irq();
+	__os_enable_irq();
 
 	return OS_ERR_OK;
 }
@@ -864,3 +881,16 @@ os_handle_t os_task_getByPID(uint16_t pid){
 	return it == NULL ? NULL : it->element;
 }
 
+/***********************************************************************
+ * OS get current task
+ *
+ * @brief Get current task
+ *
+ * @return os_task_t* : reference to the current task
+ **********************************************************************/
+os_task_t const * os_task_getCurrentTask(void){
+    if(os_cur_task == NULL)
+        return NULL;
+        
+    return (os_task_t*) os_cur_task->element;
+}

@@ -34,7 +34,8 @@ typedef enum{
 	OS_OBJ_MUTEX,
 	OS_OBJ_SEM,
 	OS_OBJ_EVT,
-	OS_OBJ_MSGQ
+	OS_OBJ_MSGQ,
+	OS_OBJ_TOPIC
 }os_obj_type_e;
 
 
@@ -50,7 +51,7 @@ typedef struct os_obj_{
 	os_obj_type_e 	type;															//Indicates what type of object
 	char*		 	name;															//Object's name
 	bool			objUpdate;														//Indicates if an update is needed in the block list of this object
-	uint32_t 		(*getFreeCount) (os_handle_t h);								//Function to get the freecount
+	uint32_t 		(*getFreeCount) (os_handle_t h, os_handle_t takingTask);		//Function to get the freecount
 	os_err_e 		(*obj_take) 	(os_handle_t h, os_handle_t takingTask);		//Function to take the object
 	void* 			blockList;														//Blocked list head (tasks waiting for this object are listed here)
 }os_obj_t;
